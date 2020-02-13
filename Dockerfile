@@ -14,11 +14,9 @@ RUN yes '' | pecl install mcrypt \
 ENV SESSION_KEY="SomeSecret, MustBe 32 bytes long"
 ENV SESSION_IV="someIV,eq16bytes"
 
-COPY nginx.conf /tmp/nginx.conf
+COPY nginx.conf RestyCrypt.php enc.php dec.php test.sh /tmp/
 
 RUN envsubst '${SESSION_KEY},${SESSION_IV}' < /tmp/nginx.conf > /usr/local/openresty/nginx/conf/nginx.conf \
     && service openresty restart
 
-# curl http://localhost/encrypt?text=...
-# curl http://localhost/decrypt?text=...
-# php test.php ...
+CMD /tmp/test.sh
