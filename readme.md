@@ -12,6 +12,5 @@ See `enc.php` / `dec.php`.
 
 ```bash
 docker build -t restycrypt-test .
-docker run -it --rm --entrypoint=/bin/bash restycrypt-test
-/tmp/test.sh
+docker run -it --rm restycrypt-test
 ```
