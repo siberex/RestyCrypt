@@ -77,7 +77,8 @@ class RestyCrypt
     /**
      * Decrypt cipher message.
      *
-     * @param string $text Base64-encoded cipher text (binary).
+     * @param string $encrypted Base64-encoded cipher text (binary).
+     * @return string? null on decoding error
      */
     public function decrypt($encrypted = '')
     {
@@ -113,24 +114,35 @@ class RestyCrypt
         // Get DateTime representation
         $dt                 = \DateTime::createFromFormat( 'U', $timingUnpacked[1] );
 
+        if ($macDecCheck !== $macDec) {
+            return null;
+        }
 
-        echo sprintf( "Encrypted b64:\t%s\n",   $encrypted );
-        echo sprintf( "Encrypted hex:\t%s\n",   bin2hex($secretMessage) );
-        echo sprintf( "Mac (decrypt):\t%s\n",   bin2hex($macDec) );
-        echo sprintf( "Decrypted hex:\t%s\n",   bin2hex($decrypted) );
-        echo sprintf( "Unpadded (dec):\t%s\n",  bin2hex($decryptedUnpadded) );
-        echo sprintf( "MAC is OK:\t%s\n",       ($macDecCheck === $macDec ? 'YES' : 'NO')  );
-        echo sprintf( "Plain hex:\t%s\n",       bin2hex($plainTextDec) );
-        echo sprintf( "Timing hex:\t%s\n",      bin2hex($timing) );
-        echo sprintf( "Timing int:\t%s\n",      $timingUnpacked[1] );
-        echo sprintf( "Timing (dec):\t%s\n",    $dt->format('r') );
-        echo sprintf( "Plain text:\t%s\n",      $plainTextDec );
+        return $plainTextDec;
 
+        // echo sprintf( "Encrypted b64:\t%s\n",   $encrypted );
+        // echo sprintf( "Encrypted hex:\t%s\n",   bin2hex($secretMessage) );
+        // echo sprintf( "Mac (decrypt):\t%s\n",   bin2hex($macDec) );
+        // echo sprintf( "Decrypted hex:\t%s\n",   bin2hex($decrypted) );
+        // echo sprintf( "Unpadded (dec):\t%s\n",  bin2hex($decryptedUnpadded) );
+        // echo sprintf( "MAC is OK:\t%s\n",       ($macDecCheck === $macDec ? 'YES' : 'NO')  );
+        // echo sprintf( "Plain hex:\t%s\n",       bin2hex($plainTextDec) );
+        // echo sprintf( "Timing hex:\t%s\n",      bin2hex($timing) );
+        // echo sprintf( "Timing int:\t%s\n",      $timingUnpacked[1] );
+        // echo sprintf( "Timing (dec):\t%s\n",    $dt->format('r') );
+        // echo sprintf( "Plain text:\t%s\n",      $plainTextDec );
     } // decrypt
 
+
+    /**
+     * Encrypt.
+     *
+     * @param string $text
+     * @return string base64-encoded cipher text (binary)
+     */
     public function encrypt($text = '')
     {
-        $plaintextPlain     = 'This is THE TEXT to be Encrypted!';
+        //$plaintextPlain     = 'This is THE TEXT to be Encrypted!';
 
         $timing = 0;
         if ($this->expiration > 0) {
@@ -141,7 +153,7 @@ class RestyCrypt
         $timingBE           = self::htonl(0) . self::htonl($timing);
 
         // Add expiration time to the text
-        $plaintextTimed     = $plaintextPlain . $timingBE;
+        $plaintextTimed     = $text . $timingBE;
 
         // Add PKCS#7 padding to the text
         $plaintextPadded    = self::pkcs7pad($plaintextTimed, BLOCK_SIZE);
@@ -156,23 +168,25 @@ class RestyCrypt
         $macEnc             = hash('md5', $plaintextTimed, true);
 
         // Encrypt message
-        $ciphertext         = mcrypt_encrypt(MCRYPT_RIJNDAEL_128, $key, $plaintextPadded, MCRYPT_MODE_CBC, $iv);
+        $ciphertext         = mcrypt_encrypt(MCRYPT_RIJNDAEL_128, $this->secret, $plaintextPadded, MCRYPT_MODE_CBC, $this->iv);
 
         // Add MAC
         $ciphertextMac      = $macEnc . $ciphertext;
 
+        return base64_encode($ciphertextMac);
 
-        echo sprintf( "Plain text:\t%s\n",      $plaintextPlain );
-        echo sprintf( "Timing (enc):\t%s\n",    $dt->format('r') );
-        echo sprintf( "Timing int:\t%s\n",      $timing );
-        echo sprintf( "Timing hex:\t%s\n",      bin2hex($timingBE) );
-        echo sprintf( "Plain hex:\t%s\n",       bin2hex($plaintextPlain) );
-        echo sprintf( "Unpadded (enc):\t%s\n",  bin2hex($plaintextTimed) );
-        echo sprintf( "Padded (enc):\t%s\n",    bin2hex($plaintextPadded) );
-        echo sprintf( "Mac (encrypt):\t%s\n",   bin2hex($macEnc) );
-        echo sprintf( "Encrypted hex:\t%s\n",   bin2hex($ciphertextMac) );
-        echo sprintf( "Encrypted b64:\t%s\n",   base64_encode($ciphertextMac) );
+        // echo sprintf( "Plain text:\t%s\n",      $text );
+        // echo sprintf( "Timing (enc):\t%s\n",    $dt->format('r') );
+        // echo sprintf( "Timing int:\t%s\n",      $timing );
+        // echo sprintf( "Timing hex:\t%s\n",      bin2hex($timingBE) );
+        // echo sprintf( "Plain hex:\t%s\n",       bin2hex($text) );
+        // echo sprintf( "Unpadded (enc):\t%s\n",  bin2hex($plaintextTimed) );
+        // echo sprintf( "Padded (enc):\t%s\n",    bin2hex($plaintextPadded) );
+        // echo sprintf( "Mac (encrypt):\t%s\n",   bin2hex($macEnc) );
+        // echo sprintf( "Encrypted hex:\t%s\n",   bin2hex($ciphertextMac) );
+        // echo sprintf( "Encrypted b64:\t%s\n",   base64_encode($ciphertextMac) );
     } // encrypt
+
 
     /**
      * Right-pads the data string with 1 to n bytes according to PKCS#7,
