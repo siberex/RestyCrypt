@@ -110,53 +110,7 @@ echo "\n\n";
 /** ENCRYPTION **/
 encryption:
 
-$plaintextPlain     = 'This is THE TEXT to be Encrypted!';
 
-// Emulate encrypted_session_expires 1d;
-//$timing             = time() + 86400;
-
-// Also you can set it to 0:
-//$timing             = 0;
-
-// Here is exact value from decryption example (above):
-$timing             = 1426974492;
-
-
-// Convert 32-bit int to network byte order with 64-bit padding ( analogue in C: htonll() )
-$timingBE           = htonl(0) . htonl($timing);
-
-// Add expiration time to the text
-$plaintextTimed     = $plaintextPlain . $timingBE;
-
-// Add PKCS#7 padding to the text
-$plaintextPadded    = pkcs7pad($plaintextTimed, $blockSize);
-
-// Get DateTime representation
-$dt                 = \DateTime::createFromFormat( 'U', $timing );
-
-// Correct way to do HMAC is this:
-// $mac = hash_hmac('md5', $cipherText, $anotherKey, true);
-
-// But Encrypted Session module uses simple MD5 of text:
-$macEnc             = hash('md5', $plaintextTimed, true);
-
-// Encrypt message
-$ciphertext         = mcrypt_encrypt(MCRYPT_RIJNDAEL_128, $key, $plaintextPadded, MCRYPT_MODE_CBC, $iv);
-
-// Add MAC
-$ciphertextMac      = $macEnc . $ciphertext;
-
-
-echo sprintf( "Plain text:\t%s\n",      $plaintextPlain );
-echo sprintf( "Timing (enc):\t%s\n",    $dt->format('r') );
-echo sprintf( "Timing int:\t%s\n",      $timing );
-echo sprintf( "Timing hex:\t%s\n",      bin2hex($timingBE) );
-echo sprintf( "Plain hex:\t%s\n",       bin2hex($plaintextPlain) );
-echo sprintf( "Unpadded (enc):\t%s\n",  bin2hex($plaintextTimed) );
-echo sprintf( "Padded (enc):\t%s\n",    bin2hex($plaintextPadded) );
-echo sprintf( "Mac (encrypt):\t%s\n",   bin2hex($macEnc) );
-echo sprintf( "Encrypted hex:\t%s\n",   bin2hex($ciphertextMac) );
-echo sprintf( "Encrypted b64:\t%s\n",   base64_encode($ciphertextMac) );
 
 echo "\n\n";
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -165,6 +119,55 @@ echo "\n\n";
 class RestyCrypt
 {
 
+    public function encrypt($text = '') {
+        $plaintextPlain     = 'This is THE TEXT to be Encrypted!';
+
+        // Emulate encrypted_session_expires 1d;
+        //$timing             = time() + 86400;
+
+        // Also you can set it to 0:
+        //$timing             = 0;
+
+        // Here is exact value from decryption example (above):
+        $timing             = 1426974492;
+
+
+        // Convert 32-bit int to network byte order with 64-bit padding ( analogue in C: htonll() )
+        $timingBE           = htonl(0) . htonl($timing);
+
+        // Add expiration time to the text
+        $plaintextTimed     = $plaintextPlain . $timingBE;
+
+        // Add PKCS#7 padding to the text
+        $plaintextPadded    = pkcs7pad($plaintextTimed, $blockSize);
+
+        // Get DateTime representation
+        $dt                 = \DateTime::createFromFormat( 'U', $timing );
+
+        // Correct way to do HMAC is this:
+        // $mac = hash_hmac('md5', $cipherText, $anotherKey, true);
+
+        // But Encrypted Session module uses simple MD5 of text:
+        $macEnc             = hash('md5', $plaintextTimed, true);
+
+        // Encrypt message
+        $ciphertext         = mcrypt_encrypt(MCRYPT_RIJNDAEL_128, $key, $plaintextPadded, MCRYPT_MODE_CBC, $iv);
+
+        // Add MAC
+        $ciphertextMac      = $macEnc . $ciphertext;
+
+
+        echo sprintf( "Plain text:\t%s\n",      $plaintextPlain );
+        echo sprintf( "Timing (enc):\t%s\n",    $dt->format('r') );
+        echo sprintf( "Timing int:\t%s\n",      $timing );
+        echo sprintf( "Timing hex:\t%s\n",      bin2hex($timingBE) );
+        echo sprintf( "Plain hex:\t%s\n",       bin2hex($plaintextPlain) );
+        echo sprintf( "Unpadded (enc):\t%s\n",  bin2hex($plaintextTimed) );
+        echo sprintf( "Padded (enc):\t%s\n",    bin2hex($plaintextPadded) );
+        echo sprintf( "Mac (encrypt):\t%s\n",   bin2hex($macEnc) );
+        echo sprintf( "Encrypted hex:\t%s\n",   bin2hex($ciphertextMac) );
+        echo sprintf( "Encrypted b64:\t%s\n",   base64_encode($ciphertextMac) );
+    }
 
     /**
      * Right-pads the data string with 1 to n bytes according to PKCS#7,
@@ -178,7 +181,7 @@ class RestyCrypt
      * @param integer $blocksize the block size of the cipher in bytes
      * @return string the padded plaintext
      */
-    function pkcs7pad($plaintext, $blocksize)
+    protected static function pkcs7pad($plaintext, $blocksize)
     {
         $padsize = $blocksize - (strlen($plaintext) % $blocksize);
         return $plaintext . str_repeat(chr($padsize), $padsize);
@@ -205,7 +208,7 @@ class RestyCrypt
      * @return string the unpadded plaintext
      * @throws Exception if the unpadding failed
      */
-    function pkcs7unpad($padded, $blocksize)
+    protected static function pkcs7unpad($padded, $blocksize)
     {
         $l = strlen($padded);
 
@@ -236,14 +239,13 @@ class RestyCrypt
         return substr($padded, 0, $l - $padsize);
     }
 
-
     /**
      * Convert 32-bit unsigned integer to a binary string in big endian (network) byte order.
      *
      * @param $n
      * @return string
      */
-    function htonl($n)
+    protected static function htonl($n)
     {
         $n = (int)$n;
         return (binary)pack('N', $n);
