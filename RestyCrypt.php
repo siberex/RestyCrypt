@@ -11,20 +11,7 @@
  * Time: 7:11
  */
 
-date_default_timezone_set('Europe/London');
-
-
-// Use the same values in your nginx config, e.g.:
-// encrypted_session_key "SomeSecret, MustBe 32 bytes long";
-// encrypted_session_iv "someIV,eq16bytes";
-
-// Key must be 32 bytes long (256 bits)
-$key        = 'SomeSecret, MustBe 32 bytes long';
-// IV must be exactly 16 bytes long (AES-256 blocksize = 128 bits)
-$iv         = 'someIV,eq16bytes';
-
-
-
+// Side notes...
 // Fixed init vector is evil in most cases, but good in case of multi-server nginx cluster
 // See also:
 // https://github.com/openresty/encrypted-session-nginx-module/issues/2
@@ -33,53 +20,90 @@ $iv         = 'someIV,eq16bytes';
 // https://github.com/openresty/encrypted-session-nginx-module/blob/master/src/ngx_http_encrypted_session_cipher.c
 // See also:
 // https://github.com/openresty/encrypted-session-nginx-module/issues/3
-//
+
+
 // Note: AES-256 is RIJNDAEL-128 (when used with a 256 bit key).
+define('BLOCK_SIZE',
+    mcrypt_get_block_size(MCRYPT_RIJNDAEL_128, MCRYPT_MODE_CBC));
 
-$blockSize  = mcrypt_get_block_size(MCRYPT_RIJNDAEL_128, MCRYPT_MODE_CBC);
-$ivSize     = mcrypt_get_iv_size(MCRYPT_RIJNDAEL_128, MCRYPT_MODE_CBC);
-$macSize    = 16;   // MD5 length in bytes
-$timingSize = 8;    // 64-bit long
+const MAC_SIZE = 16; // MD5 length in bytes
+const TIMING_SIZE  = 8; // 64-bit long
 
-
+/**
+ * Class RestyCrypt
+ *
+ * PHP implementation for OpenResty encrypted-session-nginx-module encryption and decryption methods.
+ *
+ * @see https://github.com/openresty/encrypted-session-nginx-module/blob/master/src/ngx_http_encrypted_session_cipher.c
+ */
 class RestyCrypt
 {
 
-    public function decrypt($text = '')
+    /**
+     * Key must be 32 bytes long (256 bits)
+     * Use the same value for `encrypted_session_key` nginx config variable.
+     * For example:
+     * ```
+     * encrypted_session_key "SomeSecret, MustBe 32 bytes long";
+     * ```
+     *
+     * @var string
+     */
+    protected $secret = '';
+    /**
+     * InitVector must be exactly 16 bytes long (AES-256 blocksize = 128 bits).
+     * Use the same value for `encrypted_session_iv` nginx config variable.
+     * For example:
+     * ```
+     * encrypted_session_iv "someIV,eq16bytes";
+     * ```
+     *
+     * @var string
+     */
+    protected $iv = '';
+
+    /**
+     * @var int Expiration in seconds from now.
+     */
+    protected $expiration = 0;
+
+
+    public function __construct($secret, $iv, $expiration = 0) {
+        $this->secret = $secret;
+        $this->iv = $iv;
+        $this->expiration = $expiration;
+    }
+
+    /**
+     * Decrypt cipher message.
+     *
+     * @param string $text Base64-encoded cipher text (binary).
+     */
+    public function decrypt($encrypted = '')
     {
-
-        // Cipher text (binary), base64-encoded
-
-        // Expires was set to 0 (encrypted_session_expires 0;)
-        // $encrypted          = 'lINbAuh1GsUUhV+60Pi+fTeJYUbajr6b51BnJ2dbkreLK7jKv/TkaAYbLot8HRpfPUuUfV8jmjyBHNOCeTNDkg==';
-
-        // Expires was set to default (encrypted_session_expires 1d;)
-        $encrypted          = 'eX0isqKuTth9EHvik7Wb+zeJYUbajr6b51BnJ2dbkreLK7jKv/TkaAYbLot8HRpfQW/MAkd3d5sY44bjJ5yo2w==';
-
-
         // Binary representation
         $secretMessage      = base64_decode($encrypted);
 
         // Extract MAC from cipher text
-        $macDec             = substr($secretMessage, 0, $macSize);
+        $macDec             = substr($secretMessage, 0, MAC_SIZE);
 
         // Cipher without MAC
-        $secretMessageNoMac = substr($secretMessage, $macSize);
+        $secretMessageNoMac = substr($secretMessage, MAC_SIZE);
 
         // Decipher
-        $decrypted          = mcrypt_decrypt(MCRYPT_RIJNDAEL_128, $key, $secretMessageNoMac, MCRYPT_MODE_CBC, $iv);
+        $decrypted          = mcrypt_decrypt(MCRYPT_RIJNDAEL_128, $this->secret, $secretMessageNoMac, MCRYPT_MODE_CBC, $this->iv);
 
         // Remove PKCS#7 padding
-        $decryptedUnpadded  = pkcs7unpad($decrypted, $blockSize);
+        $decryptedUnpadded  = self::pkcs7unpad($decrypted, BLOCK_SIZE);
 
         // Calculate MAC for the message
         $macDecCheck        = hash('md5', $decryptedUnpadded, true);
 
         // Strip-out expiration time
-        $timing             = substr($decryptedUnpadded, -$timingSize);
+        $timing             = substr($decryptedUnpadded, -TIMING_SIZE);
 
         // Decrypted text without expiration time
-        $plainTextDec       = substr($decryptedUnpadded, 0, -$timingSize);
+        $plainTextDec       = substr($decryptedUnpadded, 0, -TIMING_SIZE);
 
         // Silly conversion int64 → int32
         $timingInt32Bin     = substr($timing, 4);
@@ -108,24 +132,19 @@ class RestyCrypt
     {
         $plaintextPlain     = 'This is THE TEXT to be Encrypted!';
 
-        // Emulate encrypted_session_expires 1d;
-        //$timing             = time() + 86400;
-
-        // Also you can set it to 0:
-        //$timing             = 0;
-
-        // Here is exact value from decryption example (above):
-        $timing             = 1426974492;
-
+        $timing = 0;
+        if ($this->expiration > 0) {
+            $timing = time() + 86400;
+        }
 
         // Convert 32-bit int to network byte order with 64-bit padding ( analogue in C: htonll() )
-        $timingBE           = htonl(0) . htonl($timing);
+        $timingBE           = self::htonl(0) . self::htonl($timing);
 
         // Add expiration time to the text
         $plaintextTimed     = $plaintextPlain . $timingBE;
 
         // Add PKCS#7 padding to the text
-        $plaintextPadded    = pkcs7pad($plaintextTimed, $blockSize);
+        $plaintextPadded    = self::pkcs7pad($plaintextTimed, BLOCK_SIZE);
 
         // Get DateTime representation
         $dt                 = \DateTime::createFromFormat( 'U', $timing );
@@ -167,7 +186,7 @@ class RestyCrypt
      * @param integer $blocksize the block size of the cipher in bytes
      * @return string the padded plaintext
      */
-    protected static function pkcs7pad($plaintext, $blocksize)
+    protected static function pkcs7pad($plaintext, $blocksize = BLOCK_SIZE)
     {
         $padsize = $blocksize - (strlen($plaintext) % $blocksize);
         return $plaintext . str_repeat(chr($padsize), $padsize);
@@ -191,13 +210,12 @@ class RestyCrypt
      * @param string $padded the padded plaintext encoded as a string containing bytes
      * @param integer $blocksize the block size of the cipher in bytes
      * @return string the unpadded plaintext
-     * @throws Exception if the unpadding failed
      */
-    protected static function pkcs7unpad($padded, $blocksize)
+    protected static function pkcs7unpad($padded, $blocksize = BLOCK_SIZE)
     {
         $l = strlen($padded);
 
-        if ($l % $blocksize != 0) {
+        if ($l % $blocksize !== 0) {
             //throw new \Exception("Padded plaintext cannot be divided by the block size");
             return $padded;
         }
@@ -216,7 +234,7 @@ class RestyCrypt
 
         // check the correctness of the padding bytes by counting the occurance
         $padding = substr($padded, -1 * $padsize);
-        if (substr_count($padding, chr($padsize)) != $padsize) {
+        if (substr_count($padding, chr($padsize)) !== $padsize) {
             //throw new \Exception("Invalid PKCS#7 padding encountered");
             return $padded;
         }
