@@ -3,8 +3,8 @@ FROM openresty/openresty:1.15.8.2-buster
 # Test OpenResty encrypted-session-nginx-module alongside with it’s PHP counterpart
 
 # Install php
-RUN apt update \
-    && apt -y install libmcrypt-dev php7.3-dev
+RUN apt-get update \
+    && apt-get -y install libmcrypt-dev php7.3-dev
 
 # Install mcrypt
 RUN yes '' | pecl install mcrypt \
@@ -16,7 +16,4 @@ ENV SESSION_IV="someIV,eq16bytes"
 
 COPY nginx.conf RestyCrypt.php enc.php dec.php test.sh /tmp/
 
-RUN envsubst '${SESSION_KEY},${SESSION_IV}' < /tmp/nginx.conf > /usr/local/openresty/nginx/conf/nginx.conf \
-    && service openresty restart
-
-CMD /tmp/test.sh
+RUN envsubst '${SESSION_KEY},${SESSION_IV}' < /tmp/nginx.conf > /usr/local/openresty/nginx/conf/nginx.conf
