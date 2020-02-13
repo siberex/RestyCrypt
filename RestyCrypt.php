@@ -42,84 +42,70 @@ $macSize    = 16;   // MD5 length in bytes
 $timingSize = 8;    // 64-bit long
 
 
-echo "\n\n";
-
-//goto encryption;
-
-
-/** DECRYPTION **/
-
-// Cipher text (binary), base64-encoded
-
-// Expires was set to 0 (encrypted_session_expires 0;)
-// $encrypted          = 'lINbAuh1GsUUhV+60Pi+fTeJYUbajr6b51BnJ2dbkreLK7jKv/TkaAYbLot8HRpfPUuUfV8jmjyBHNOCeTNDkg==';
-
-// Expires was set to default (encrypted_session_expires 1d;)
-$encrypted          = 'eX0isqKuTth9EHvik7Wb+zeJYUbajr6b51BnJ2dbkreLK7jKv/TkaAYbLot8HRpfQW/MAkd3d5sY44bjJ5yo2w==';
-
-
-// Binary representation
-$secretMessage      = base64_decode($encrypted);
-
-// Extract MAC from cipher text
-$macDec             = substr($secretMessage, 0, $macSize);
-
-// Cipher without MAC
-$secretMessageNoMac = substr($secretMessage, $macSize);
-
-// Decipher
-$decrypted          = mcrypt_decrypt(MCRYPT_RIJNDAEL_128, $key, $secretMessageNoMac, MCRYPT_MODE_CBC, $iv);
-
-// Remove PKCS#7 padding
-$decryptedUnpadded  = pkcs7unpad($decrypted, $blockSize);
-
-// Calculate MAC for the message
-$macDecCheck        = hash('md5', $decryptedUnpadded, true);
-
-// Strip-out expiration time
-$timing             = substr($decryptedUnpadded, -$timingSize);
-
-// Decrypted text without expiration time
-$plainTextDec       = substr($decryptedUnpadded, 0, -$timingSize);
-
-// Silly conversion int64 → int32
-$timingInt32Bin     = substr($timing, 4);
-// Unpack from binary big endian byte order
-$timingUnpacked     = unpack('N', $timingInt32Bin);
-
-// Get DateTime representation
-$dt                 = \DateTime::createFromFormat( 'U', $timingUnpacked[1] );
-
-
-echo sprintf( "Encrypted b64:\t%s\n",   $encrypted );
-echo sprintf( "Encrypted hex:\t%s\n",   bin2hex($secretMessage) );
-echo sprintf( "Mac (decrypt):\t%s\n",   bin2hex($macDec) );
-echo sprintf( "Decrypted hex:\t%s\n",   bin2hex($decrypted) );
-echo sprintf( "Unpadded (dec):\t%s\n",  bin2hex($decryptedUnpadded) );
-echo sprintf( "MAC is OK:\t%s\n",       ($macDecCheck === $macDec ? 'YES' : 'NO')  );
-echo sprintf( "Plain hex:\t%s\n",       bin2hex($plainTextDec) );
-echo sprintf( "Timing hex:\t%s\n",      bin2hex($timing) );
-echo sprintf( "Timing int:\t%s\n",      $timingUnpacked[1] );
-echo sprintf( "Timing (dec):\t%s\n",    $dt->format('r') );
-echo sprintf( "Plain text:\t%s\n",      $plainTextDec );
-
-echo "\n\n";
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-/** ENCRYPTION **/
-encryption:
-
-
-
-echo "\n\n";
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
 class RestyCrypt
 {
 
-    public function encrypt($text = '') {
+    public function decrypt($text = '')
+    {
+
+        // Cipher text (binary), base64-encoded
+
+        // Expires was set to 0 (encrypted_session_expires 0;)
+        // $encrypted          = 'lINbAuh1GsUUhV+60Pi+fTeJYUbajr6b51BnJ2dbkreLK7jKv/TkaAYbLot8HRpfPUuUfV8jmjyBHNOCeTNDkg==';
+
+        // Expires was set to default (encrypted_session_expires 1d;)
+        $encrypted          = 'eX0isqKuTth9EHvik7Wb+zeJYUbajr6b51BnJ2dbkreLK7jKv/TkaAYbLot8HRpfQW/MAkd3d5sY44bjJ5yo2w==';
+
+
+        // Binary representation
+        $secretMessage      = base64_decode($encrypted);
+
+        // Extract MAC from cipher text
+        $macDec             = substr($secretMessage, 0, $macSize);
+
+        // Cipher without MAC
+        $secretMessageNoMac = substr($secretMessage, $macSize);
+
+        // Decipher
+        $decrypted          = mcrypt_decrypt(MCRYPT_RIJNDAEL_128, $key, $secretMessageNoMac, MCRYPT_MODE_CBC, $iv);
+
+        // Remove PKCS#7 padding
+        $decryptedUnpadded  = pkcs7unpad($decrypted, $blockSize);
+
+        // Calculate MAC for the message
+        $macDecCheck        = hash('md5', $decryptedUnpadded, true);
+
+        // Strip-out expiration time
+        $timing             = substr($decryptedUnpadded, -$timingSize);
+
+        // Decrypted text without expiration time
+        $plainTextDec       = substr($decryptedUnpadded, 0, -$timingSize);
+
+        // Silly conversion int64 → int32
+        $timingInt32Bin     = substr($timing, 4);
+        // Unpack from binary big endian byte order
+        $timingUnpacked     = unpack('N', $timingInt32Bin);
+
+        // Get DateTime representation
+        $dt                 = \DateTime::createFromFormat( 'U', $timingUnpacked[1] );
+
+
+        echo sprintf( "Encrypted b64:\t%s\n",   $encrypted );
+        echo sprintf( "Encrypted hex:\t%s\n",   bin2hex($secretMessage) );
+        echo sprintf( "Mac (decrypt):\t%s\n",   bin2hex($macDec) );
+        echo sprintf( "Decrypted hex:\t%s\n",   bin2hex($decrypted) );
+        echo sprintf( "Unpadded (dec):\t%s\n",  bin2hex($decryptedUnpadded) );
+        echo sprintf( "MAC is OK:\t%s\n",       ($macDecCheck === $macDec ? 'YES' : 'NO')  );
+        echo sprintf( "Plain hex:\t%s\n",       bin2hex($plainTextDec) );
+        echo sprintf( "Timing hex:\t%s\n",      bin2hex($timing) );
+        echo sprintf( "Timing int:\t%s\n",      $timingUnpacked[1] );
+        echo sprintf( "Timing (dec):\t%s\n",    $dt->format('r') );
+        echo sprintf( "Plain text:\t%s\n",      $plainTextDec );
+
+    } // decrypt
+
+    public function encrypt($text = '')
+    {
         $plaintextPlain     = 'This is THE TEXT to be Encrypted!';
 
         // Emulate encrypted_session_expires 1d;
@@ -167,7 +153,7 @@ class RestyCrypt
         echo sprintf( "Mac (encrypt):\t%s\n",   bin2hex($macEnc) );
         echo sprintf( "Encrypted hex:\t%s\n",   bin2hex($ciphertextMac) );
         echo sprintf( "Encrypted b64:\t%s\n",   base64_encode($ciphertextMac) );
-    }
+    } // encrypt
 
     /**
      * Right-pads the data string with 1 to n bytes according to PKCS#7,
@@ -185,8 +171,7 @@ class RestyCrypt
     {
         $padsize = $blocksize - (strlen($plaintext) % $blocksize);
         return $plaintext . str_repeat(chr($padsize), $padsize);
-    }
-
+    } // pkcs7pad
 
     /**
      * Validates and unpads the padded plaintext according to PKCS#7.
@@ -237,7 +222,7 @@ class RestyCrypt
         }
 
         return substr($padded, 0, $l - $padsize);
-    }
+    } // pkcs7unpad
 
     /**
      * Convert 32-bit unsigned integer to a binary string in big endian (network) byte order.
@@ -249,6 +234,6 @@ class RestyCrypt
     {
         $n = (int)$n;
         return (binary)pack('N', $n);
-    }
+    } // htonl
 
 }
